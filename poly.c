@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <assert.h>
 
 typedef long poly_coeff_t;
 typedef int poly_exp_t;
@@ -16,9 +17,6 @@ typedef struct Poly Poly;
 
 struct Mono;
 typedef struct Mono Mono;
-
-struct MonoList;
-typedef struct MonoList MonoList;
 
 struct Poly {
     enum UnionTest tag;
@@ -134,7 +132,8 @@ static inline void MonoDestroy(Mono *m)
  * @param[in] p : wielomian
  * @return skopiowany wielomian
  */
-Poly PolyClone(const Poly *p) {
+Poly PolyClone(const Poly *p)
+{
     printf("PolyClone\n");
     if (PolyIsZero(p)) {
         return PolyZero();
@@ -143,27 +142,29 @@ Poly PolyClone(const Poly *p) {
     } else {
         Poly p_clone;
         p_clone.tag = p->tag;
-        Poly tmp = *p;
+        Mono *tmp = p->type.m;
         Mono *start = (Mono*) malloc(sizeof(Mono));
-        start->exp = tmp.type.m->exp;
+        assert(start != NULL);
+        start->exp = tmp->exp;
         start->next = NULL;
         Mono *wanderer = start;
         Mono *helper;
-        tmp.type.m = tmp.type.m->next;
-        while (tmp.type.m != NULL) {
+        tmp = tmp->next;
+        while (tmp != NULL) {
             helper = (Mono*) malloc(sizeof(Mono));
+            assert(helper != NULL);
             helper->next = NULL;
-            helper->exp = tmp.type.m->exp;
+            helper->exp = tmp->exp;
             wanderer->next = helper;
             wanderer = helper;
-            tmp.type.m = tmp.type.m->next;
+            tmp = tmp->next;
         }
         wanderer = start;
-        tmp = *p;
+        tmp = p->type.m;
         while (wanderer != NULL) {
-            wanderer->p = PolyClone(&tmp.type.m->p);
+            wanderer->p = PolyClone(&tmp->p);
             wanderer = wanderer->next;
-            tmp.type.m = tmp.type.m->next;
+            tmp = tmp->next;
         }
         p_clone.type.m = start;
         return p_clone;
@@ -196,7 +197,7 @@ Poly PolyAdd(const Poly *p, const Poly *q)
 {
     printf("PolyAdd\n");
     Mono *zeroexp;
-    Poly added;
+    Poly added, new;
     if (PolyIsZero(p)) {
         return PolyClone(q);
     } else if (PolyIsZero(q)) {
@@ -208,89 +209,104 @@ Poly PolyAdd(const Poly *p, const Poly *q)
         else {
             return PolyZero();
         }
-    } else if (PolyIsCoeff(p)) {
-        zeroexp = (Mono*) malloc(sizeof(Mono));
-        zeroexp->p = PolyFromCoeff(p->type.c);
+    } else if (PolyIsCoeff(p) || PolyIsCoeff(q)) {
+        zeroexp = (Mono *) malloc(sizeof(Mono));
+        assert(zeroexp != NULL);
         zeroexp->exp = 0;
         zeroexp->next = NULL;
-        Poly new;
         new.tag = COMPLEX;
         new.type.m = zeroexp;
-        added = PolyAdd(&new, q);
-        free(zeroexp);
-        return added;
-    } else if (PolyIsCoeff(q)) {
-        zeroexp = (Mono*) malloc(sizeof(Mono));
-        zeroexp->p = PolyFromCoeff(p->type.c);
-        zeroexp->exp = 0;
-        zeroexp->next = NULL;
-        Poly new;
-        new.tag = COMPLEX;
-        new.type.m = zeroexp;
-        added = PolyAdd(&new, q);
-        free(zeroexp);
+        if (PolyIsCoeff(p)) {
+            zeroexp->p = PolyFromCoeff(p->type.c);
+            added = PolyAdd(&new, q);
+        } else {
+            zeroexp->p = PolyFromCoeff(q->type.c);
+            added = PolyAdd(&new, p);
+        }
+        PolyDestroy(&new);
         return added;
     } else {
         added.tag = COMPLEX;
         Mono *doll = (Mono*) malloc(sizeof(Mono));
+        assert(doll != NULL);
         Mono *wanderer = doll;
-        Mono *deleter, *temp;
-        Poly help1 = PolyClone(p);
-        Poly help2 = PolyClone(q);
-        while (help1.type.m != NULL && help2.type.m != NULL) {
-            if (help1.type.m->exp < help2.type.m->exp) {
-                wanderer->next = help1.type.m;
-                help1.type.m = help1.type.m->next;
-                wanderer = wanderer->next;
-            } else if (help1.type.m->exp > help2.type.m->exp) {
-                wanderer->next = help2.type.m;
-                help1.type.m = help2.type.m->next;
-                wanderer = wanderer->next;
-            } else { //help1.exp == help2.exp
-                temp = (Mono*) malloc(sizeof(Mono));
-                temp->p = PolyAdd(&help1.type.m->p, &help2.type.m->p);
-                if (!PolyIsZero(&temp->p)) {
-                    temp->next = NULL;
-                    temp->exp = help1.type.m->exp;
-                    wanderer->next = temp;
-                    wanderer = wanderer->next;
-                } else {
-                    PolyDestroy(&temp->p);
-                    free(temp);
+        Mono *new_mono;
+        Mono *mono_p = p->type.m;
+        Mono *mono_q = q->type.m;
+        while (mono_p != NULL && mono_q != NULL) {
+            if (mono_p->exp != mono_q->exp) {
+                new_mono = (Mono*) malloc(sizeof(Mono));
+                assert(new_mono != NULL);
+                new_mono->next = NULL;
+                if (mono_p->exp > mono_q->exp) {
+                    new_mono->exp = mono_p->exp;
+                    new_mono->p = PolyClone(&mono_p->p);
+                    mono_p = mono_p->next;
+                } else {  // mono_p->exp > mono_q->exp
+                    new_mono->exp = mono_q->exp;
+                    new_mono->p = PolyClone(&mono_q->p);
+                    mono_q = mono_q->next;
                 }
-                deleter = help1.type.m;
-                help1.type.m = help1.type.m->next;
-                PolyDestroy(&deleter->p);
-                free(deleter);// możliwe że polydestroy, a potem free(deleter);
-                deleter = help2.type.m;
-                help2.type.m = help2.type.m->next;
-                PolyDestroy(&deleter->p);                // to samo
-                free(deleter);
+                wanderer->next = new_mono;
+                wanderer = wanderer->next;
+            } else { //p.exp == q.exp
+                new_mono = (Mono*) malloc(sizeof(Mono));
+                assert(new_mono != NULL);
+                new_mono->p = PolyAdd(&mono_p->p, &mono_q->p);
+                if (PolyIsZero(&new_mono->p)) {
+                    PolyDestroy(&new_mono->p);
+                    free(new_mono);
+                } else {
+                    new_mono->next = NULL;
+                    new_mono->exp = mono_p->exp;
+                    wanderer->next = new_mono;
+                    wanderer = wanderer->next;
+                }
+                mono_p = mono_p->next;
+                mono_q = mono_q->next;
             }
         }
-        if (help1.type.m != NULL) {
-            wanderer->next = help1.type.m;
-        } else if (help2.type.m != NULL) {
-            wanderer->next = help2.type.m;
-        }
 
+        if (mono_p != NULL || mono_q != NULL) {
+            while (mono_p != NULL) {
+                new_mono = (Mono*) malloc(sizeof(Mono));
+                assert(new_mono != NULL);
+                new_mono->exp = mono_p->exp;
+                new_mono->next = NULL;
+                new_mono->p = PolyClone(&mono_p->p);
+                mono_p = mono_p->next;
+            }
+            while (mono_q != NULL) {
+                new_mono = (Mono*) malloc(sizeof(Mono));
+                assert(new_mono != NULL);
+                new_mono->exp = mono_q->exp;
+                new_mono->next = NULL;
+                new_mono->p = PolyClone(&mono_q->p);
+                mono_q = mono_q->next;
+            }
+        }
 
         added.type.m = doll->next;
+        wanderer = added.type.m;
         free(doll);
-        Poly helper;
-        while (added.type.m->p.tag == COMPLEX && added.type.m->exp == 0 &&
-                added.type.m->next == NULL) {                            // WTF, chyba PolyAt
-      //      helper = PolyAt(&added, 1);
-            PolyDestroy(&added);
-            added = helper;
-        }
 
-        if (added.type.m == NULL) {
+        Poly helper;
+        if (wanderer == NULL) {
             added = PolyZero();
-        } else if (added.type.m->p.tag == SIMPLE) {
-            helper = added;
-            added = PolyFromCoeff(added.type.m->p.type.c);
-            PolyDestroy(&helper);
+        } else  { /*
+            while (wanderer->p.tag == COMPLEX &&
+                   wanderer->exp == 0 &&
+                   wanderer->next == NULL) {
+                helper = PolyAt(&added, 1);
+                PolyDestroy(&added);
+                added = helper;
+                wanderer = added.type.m;
+            } */
+            if (wanderer->p.tag == SIMPLE && wanderer->next == NULL) {
+                helper = added;
+                added = PolyFromCoeff(added.type.m->p.type.c);
+                PolyDestroy(&helper);
+            }
         }
         return added;
     }
@@ -316,42 +332,67 @@ Poly PolyAddMonos(unsigned count, const Mono monos[])
 {
     printf("PolyAddMonos\n");
     Poly p;
+    Poly helper, destroyer;
     Mono *tmp = (Mono*) monos;
     qsort(tmp, count, sizeof(Mono), MonoExpComparator);
     unsigned i = 0;
     Mono *doll = (Mono*) malloc(sizeof(Mono));
+    assert(doll != NULL);
     doll->exp = -1;
+    Mono *backer = NULL;
     Mono *wanderer = doll;
     Mono *newMono;
     while (i < count) {
         if (!PolyIsZero(&tmp[i].p)) {
-            printf("TU\n");
-            newMono = (Mono*) malloc(sizeof(Mono));
-            newMono->next = NULL;
+            printf("1\n");
             if (wanderer->exp != tmp[i].exp) {
+
+                printf("2\n");
+                newMono = (Mono*) malloc(sizeof(Mono));
+                assert(newMono != NULL);
+                newMono->next = NULL;
                 newMono->exp = tmp[i].exp;
                 newMono->p = tmp[i].p;
                 wanderer->next = newMono;
+                backer = wanderer;
+                wanderer = wanderer->next;
             }
             else {
-                newMono->p = PolyAdd(&wanderer->p, &tmp[i].p);
-                MonoDestroy(&tmp[i]);
-                PolyDestroy(&wanderer->p);
-                wanderer->p = newMono->p;
+                helper = PolyAdd(&wanderer->p, &tmp[i].p);
+                if (PolyIsZero(&helper)) {
+                    PolyDestroy(&wanderer->p);
+                    free(wanderer);
+                    wanderer = backer;
+                    wanderer->next = NULL;
+                } else {
+                    destroyer = wanderer->p;
+                    MonoDestroy(&tmp[i]);
+                    PolyDestroy(&destroyer);
+                    wanderer->p = helper;
+                }
             }
         }
         i++;
     }
     wanderer = doll->next;
+    p.type.m = wanderer;
     free(doll);
     if (wanderer == NULL) {
         p = PolyZero();
-    } else if (wanderer->exp == 0 && wanderer->next == NULL) {
-        p = PolyFromCoeff(wanderer->p.type.c);
-        free(wanderer);
-    } else {
-        p.tag = COMPLEX;
-        p.type.m = wanderer;
+    } else  {/*
+        while (wanderer->p.tag == COMPLEX &&
+               wanderer->exp == 0 &&
+               wanderer->next == NULL) {
+            helper = PolyAt(&p, 1);
+            PolyDestroy(&p);
+            p = helper;
+            wanderer = p.type.m;
+        } */
+        if (wanderer->p.tag == SIMPLE && wanderer->next == NULL) {
+            helper = p;
+            p = PolyFromCoeff(wanderer->p.type.c);
+            PolyDestroy(&helper);
+        }
     }
     return p;
 
@@ -364,12 +405,64 @@ Poly PolyAddMonos(unsigned count, const Mono monos[])
  * @param[in] p : wielomian
  * @param[in] q : wielomian
  * @return `p * q`
- */
+ *
+ * */
 Poly PolyMul(const Poly *p, const Poly *q)
 {
     printf("PolyMul\n");
-    Poly m;
-    return m;
+    if (PolyIsZero(p) || PolyIsZero(q)) {
+        return PolyZero();
+    } else if (PolyIsCoeff(p) || PolyIsCoeff(q)) {
+        if (PolyIsCoeff(p) && PolyIsCoeff(q)) {
+            return PolyFromCoeff(p->type.c * p->type.c);
+        } else {
+            Poly toMultiply;
+            Poly score;
+            Mono *zeroexp = (Mono*) malloc(sizeof(Mono));
+            assert(zeroexp != NULL);
+            zeroexp->exp = 0;
+            zeroexp->next = NULL;
+            toMultiply.tag = COMPLEX;
+            toMultiply.type.m = zeroexp;
+            if (PolyIsCoeff(p)) {
+                zeroexp->p = PolyFromCoeff(p->type.c);
+                score = PolyMul(&toMultiply, q);
+            } else {
+                zeroexp->p = PolyFromCoeff(q->type.c);
+                score = PolyMul(&toMultiply, p);
+            }
+            PolyDestroy(&toMultiply);
+            return score;
+        }
+    } else {
+        poly_exp_t counter = 0;
+        Mono *header_p = p->type.m;
+        while (header_p != NULL) {
+            counter++;
+            header_p = header_p->next;
+        }
+        Mono *header_q = q->type.m;
+        while (header_q != NULL) {
+            counter++;
+            header_q = header_q->next;
+        }
+        Mono *monos = (Mono*) malloc(sizeof(Mono) * counter);
+        poly_exp_t i = 0;
+        header_p = p->type.m;
+        while (header_p != NULL) {
+            header_q = q->type.m;
+            while (header_q != NULL) {
+                monos[i].exp = header_p->exp + header_q->exp;
+                monos[i].next = NULL;
+                monos[i].p = PolyMul(&header_p->p, &header_q->p);
+                i++;
+            }
+            header_p = header_p->next;
+        }
+        Poly score2 = PolyAddMonos((unsigned)counter, monos);
+        free(monos);
+        return score2;
+    }
 }
 
 /**
@@ -380,8 +473,40 @@ Poly PolyMul(const Poly *p, const Poly *q)
 Poly PolyNeg(const Poly *p)
 {
     printf("PolyNeg\n");
-    Poly m;
-    return m;
+    if (PolyIsZero(p)) {
+        return PolyZero();
+    } else if (PolyIsCoeff(p)) {
+        return PolyFromCoeff(p->type.c * (-1));
+    } else {
+        Poly p_neg;
+        p_neg.tag = p->tag;
+        Mono *tmp = p->type.m;
+        Mono *start = (Mono*) malloc(sizeof(Mono));
+        assert(start != NULL);
+        start->exp = tmp->exp;
+        start->next = NULL;
+        Mono *wanderer = start;
+        Mono *helper;
+        tmp = tmp->next;
+        while (tmp != NULL) {
+            helper = (Mono*) malloc(sizeof(Mono));
+            assert(helper != NULL);
+            helper->next = NULL;
+            helper->exp = tmp->exp;
+            wanderer->next = helper;
+            wanderer = helper;
+            tmp = tmp->next;
+        }
+        wanderer = start;
+        tmp = p->type.m;
+        while (wanderer != NULL) {
+            wanderer->p = PolyClone(&tmp->p);
+            wanderer = wanderer->next;
+            tmp = tmp->next;
+        }
+        p_neg.type.m = start;
+        return p_neg;
+    }
 }
 
 /**
@@ -393,8 +518,10 @@ Poly PolyNeg(const Poly *p)
 Poly PolySub(const Poly *p, const Poly *q)
 {
     printf("PolySub\n");
-    Poly m;
-    return m;
+    Poly q_neg = PolyNeg(q);
+    Poly subbed = PolyAdd(p, &q_neg);
+    PolyDestroy(&q_neg);
+    return subbed;
 }
 
 /**
@@ -411,7 +538,25 @@ Poly PolySub(const Poly *p, const Poly *q)
 poly_exp_t PolyDegBy(const Poly *p, unsigned var_idx)
 {
     printf("PolyDegBy\n");
-    return -2;
+    if (PolyIsZero(p)) {
+        return -1;
+    }
+    else if (var_idx == 0) {
+        return p->type.m->exp;
+    }
+    else {
+        poly_exp_t deg = -2;
+        poly_exp_t y;
+        Mono *helper = p->type.m;
+        while (helper != NULL) {
+            y = PolyDegBy(&helper->p, var_idx - 1);
+            if (y > deg) {
+                deg = y;
+            }
+            helper = helper->next;
+        }
+        return deg;
+    }
 }
 
 /**
@@ -422,7 +567,15 @@ poly_exp_t PolyDegBy(const Poly *p, unsigned var_idx)
 poly_exp_t PolyDeg(const Poly *p)
 {
     printf("PolyDeg\n");
-    return -2;
+    if (PolyIsZero(p)) {
+        return -1;
+    }
+    else if (PolyIsCoeff(p)) {
+        return 0;
+    }
+    else {
+        return p->type.m->exp;
+    }
 }
 
 /**
@@ -434,7 +587,35 @@ poly_exp_t PolyDeg(const Poly *p)
 bool PolyIsEq(const Poly *p, const Poly *q)
 {
     printf("PolyIsEq\n");
-    return false;
+    if (PolyIsZero(p) || PolyIsZero(q)) {
+        return PolyIsZero(p) && PolyIsZero(q);
+    } else if (PolyIsCoeff(p) || PolyIsCoeff(q)) {
+        if (!(PolyIsCoeff(p) && PolyIsCoeff(q))) {
+            return false;
+        } else {
+            return p->type.c == q->type.c;
+        }
+    } else {
+        bool isEq = true;
+        Mono *tmp_p = p->type.m;
+        Mono *tmp_q = q->type.m;
+        while (tmp_p != NULL && tmp_q != NULL) {
+            if (tmp_p->exp != tmp_q->exp) {
+                return false;
+            } else {
+                isEq = PolyIsEq(&tmp_p->p, &tmp_q->p);
+                if (isEq == false) {                          //warunek chyba ok?
+                    return false;
+                }
+            }
+            tmp_p = tmp_p->next;
+            tmp_q = tmp_q->next;
+        }
+        if (!(tmp_q == NULL && tmp_p == NULL)) {
+            return false;
+        }
+        return isEq;
+    }
 }
 
 /**
@@ -447,7 +628,7 @@ bool PolyIsEq(const Poly *p, const Poly *q)
  * @param[in] p
  * @param[in] x
  * @return @f$p(x, x_0, x_1, \ldots)@f$
- */
+*/
 Poly PolyAt(const Poly *p, poly_coeff_t x)
 {
     printf("PolyAt\n");

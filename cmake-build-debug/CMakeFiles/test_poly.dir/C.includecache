@@ -19,8 +19,6 @@ stdbool.h
 -
 assert.h
 -
-printf.h
--
 
 /home/pjotrekk/CLionProjects/Poly2/poly.h
 stdbool.h
