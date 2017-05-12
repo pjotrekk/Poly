@@ -1,0 +1,1 @@
+/usr/bin/cc  -g   CMakeFiles/Poly2.dir/test_poly.c.o CMakeFiles/Poly2.dir/poly.c.o  -o Poly2 

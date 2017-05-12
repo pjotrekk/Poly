@@ -1,0 +1,3 @@
+/home/pjotrekk/CLionProjects/Poly2/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/home/pjotrekk/CLionProjects/Poly2/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/pjotrekk/CLionProjects/Poly2/cmake-build-debug/CMakeFiles/test_poly.dir

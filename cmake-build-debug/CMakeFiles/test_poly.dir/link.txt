@@ -1,0 +1,1 @@
+/usr/bin/cc  -std=c11 -Wall -Wextra -g   CMakeFiles/test_poly.dir/test_poly.c.o CMakeFiles/test_poly.dir/poly.c.o  -o test_poly 
